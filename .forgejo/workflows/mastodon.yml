@@ -1,0 +1,43 @@
+name: Build and Publish Docker Image
+
+on:
+  push:
+    branches:
+      - "main"
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build_and_publish:
+    runs-on: amd64
+    container:
+      image: data.forgejo.org/oci/node:24-alpine
+    steps:
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@v6
+
+      - name: Install dependencies
+        run: apk add docker-cli
+
+      - name: Set up QEMU
+        uses: https://github.com/docker/setup-qemu-action@v4
+
+      - name: Setup Buildx
+        uses: https://github.com/docker/setup-buildx-action@v4
+
+      - name: Log in to Forgejo Container Registry
+        uses: https://github.com/docker/login-action@v4
+        with:
+          registry: git.kura.gg
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: https://github.com/docker/build-push-action@v7
+        with:
+          platforms: linux/amd64
+          file: ./Containerfile
+          context: .
+          tags: |
+            git.kura.gg/kura/gitch-mastodon:latest
+          push: true

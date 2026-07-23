@@ -1,0 +1,31 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+mkdir -p \
+    /app/www/tmp \
+    /config/mastodon/public/system
+
+lsiown -R abc:abc \
+    /app/www/tmp
+
+# Remove old pid in the event of an unclean shutdown
+if [[ -f /app/www/tmp/pids/server.pid ]]; then
+    rm /app/www/tmp/pids/server.pid
+fi
+
+if [[ ! -L "/app/www/public/system" ]]; then
+    rm -rf "/app/www/public/system"
+    ln -s "/config/mastodon/public/system" "/app/www/public/system"
+fi
+
+cd /app/www/ || exit 1
+
+# Don't run DB prep if this is a sidekiq-only container
+if [[ ${SIDEKIQ_ONLY,,} != "true" ]]; then
+    s6-setuidgid abc /usr/bin/bundle exec rails db:prepare
+fi
+
+if [[ ${NO_CHOWN,,} != "true" ]]; then
+    lsiown -R abc:abc \
+        /config
+fi
