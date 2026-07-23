@@ -39,5 +39,5 @@ jobs:
           file: ./Containerfile
           context: .
           tags: |
-            git.kura.gg/kura/gitch-mastodon:latest
+            git.kura.gg/kura/glitch-mastodon:latest
           push: true
