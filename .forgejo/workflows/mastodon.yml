@@ -33,7 +33,7 @@ jobs:
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Set version envvar
-        run: echo "VERSION_ENV=$(curl -sX GET "https://api.github.com/repos/glitch-soc/mastodon/releases/latest"  | awk '/tag_name/{print $4;exit}' FS='[""]' | sed 's/v//g')" >> $FORGEJO_ENV
+        run: echo "VERSION_ENV=$(wget -qO- "https://api.github.com/repos/glitch-soc/mastodon/releases/latest"  | awk '/tag_name/{print $4;exit}' FS='[""]' | sed 's/v//g')" >> $FORGEJO_ENV
 
       - name: Build and push Docker image
         uses: https://github.com/docker/build-push-action@v7
