@@ -32,6 +32,9 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
+      - name: Set version envvar
+        run: echo "VERSION_ENV=$(curl -sX GET "https://api.github.com/repos/glitch-soc/mastodon/releases/latest"  | awk '/tag_name/{print $4;exit}' FS='[""]' | sed 's/v//g')" >> $FORGEJO_ENV
+
       - name: Build and push Docker image
         uses: https://github.com/docker/build-push-action@v7
         with:
@@ -40,4 +43,5 @@ jobs:
           context: .
           tags: |
             git.kura.gg/kura/glitch-mastodon:latest
+            git.kura.gg/kura/glitch-mastodon:${{ env.VERSION_ENV }}
           push: true
