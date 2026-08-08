@@ -13,8 +13,4 @@ if [[ ${SIDEKIQ_ONLY,,} == "true" ]]; then
     rm /etc/s6-overlay/s6-rc.d/user/contents.d/svc-streaming
 fi
 
-# Force S3_PERMISSION to reach Rails as an empty string (ACLs disabled).
-# s6 with-contenv drops 0-byte vars; a lone newline yields "".
-printf '\n' > /run/s6/container_environment/S3_PERMISSION
-
 exec /docker-mods
