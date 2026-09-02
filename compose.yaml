@@ -1,0 +1,210 @@
+x-arcane:
+  icon: https://icons.home.arpa/mastodon.svg
+
+services:
+  mastodon:
+    image: git.kura.gg/kura/glitch-mastodon:latest
+    container_name: mastodon
+    hostname: mastodon
+    depends_on:
+      mastodon-db:
+        condition: service_healthy
+      mastodon-broker:
+        condition: service_healthy
+      mastodon-search:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - LOCAL_DOMAIN=${LOCAL_DOMAIN}
+      - SIDEKIQ_THREADS=${SIDEKIQ_THREADS}
+      - DB_POOL=${DB_POOL}
+      - MEDIA_CACHE_RETENTION_PERIOD=${MEDIA_CACHE_RETENTION_PERIOD}
+      - MAX_TOOT_CHARS=${MAX_TOOT_CHARS}
+      - DEFAULT_LOCALE=${DEFAULT_LOCALE}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_NAME=${DB_NAME}
+      - DB_PASS=${DB_PASS}
+      - DB_PORT=${DB_PORT}
+      - ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY=${ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY}
+      - ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT=${ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT}
+      - ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY=${ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY}
+      - SECRET_KEY_BASE=${SECRET_KEY_BASE}
+      - OTP_SECRET=${OTP_SECRET}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - SMTP_SERVER=${SMTP_SERVER}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_ENABLE_STARTTLS=${SMTP_ENABLE_STARTTLS}
+      - SMTP_LOGIN=${SMTP_LOGIN}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM_ADDRESS=${SMTP_FROM_ADDRESS}
+      - ES_ENABLED=${ES_ENABLED}
+      - ES_HOST=${ES_HOST}
+      - ES_PORT=${ES_PORT}
+      - S3_ENABLED=${S3_ENABLED}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_PROTOCOL=${S3_PROTOCOL}
+      - S3_FORCE_SINGLE_REQUEST=${S3_FORCE_SINGLE_REQUEST}
+      - S3_BUCKET=${S3_BUCKET}
+      - S3_REGION=${S3_REGION}
+      - S3_ALIAS_HOST=${S3_ALIAS_HOST}
+      # Bucket has "Bucket owner enforced" (ACLs disabled), so don't send an ACL
+      - S3_PERMISSION=
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - /data/mastodon/mastodon:/config
+    labels:
+      - com.getarcaneapp.arcane.icon=https://icons.home.arpa/mastodon.svg
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  mastodon-db:
+    image: postgres:18
+    container_name: mastodon-db
+    hostname: mastodon-db
+    shm_size: '1gb'
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      - "-c"
+      - "pg_stat_statements.track=all"
+    environment:
+      - TZ=${TZ}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - /data/mastodon/db:/var/lib/postgresql/18
+    labels:
+      - com.getarcaneapp.arcane.icon=https://icons.home.arpa/postgresql.svg
+    restart: always
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "mastodon", "-d", "mastodon"]
+      interval: 60s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+
+  mastodon-broker:
+    image: docker.io/valkey/valkey:8-bookworm
+    container_name: mastodon-broker
+    hostname: mastodon-broker
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+    - /data/mastodon/broker:/data
+    labels:
+      - com.getarcaneapp.arcane.icon=https://icons.home.arpa/valkey.svg
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mastodon-search:
+    image: elasticsearch:9.4.3
+    container_name: mastodon-search
+    hostname: mastodon-search
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - ES_JAVA_OPTS=${ES_JAVA_OPTS}
+      - xpack.security.enabled=false
+      - discovery.type=single-node
+    volumes:
+      - /data/mastodon/search:/usr/share/elasticsearch/data
+    labels:
+      - com.getarcaneapp.arcane.icon=https://icons.home.arpa/elasticsearch.svg
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  mastodon-tunnel:
+    image: cloudflare/cloudflared
+    container_name: mastodon-tunnel
+    hostname: mastodon-tunnel
+    depends_on:
+      mastodon:
+        condition: service_healthy
+    command: tunnel --metrics=127.0.0.1:20241 --http-host-header=cyberpsychosis.io run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    labels:
+      - com.getarcaneapp.arcane.icon=https://icons.home.arpa/cloudflare-zero-trust.svg
+    restart: always
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:20241", "ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  mastodon-health:
+    image: ghcr.io/kura/bash-runner:latest
+    container_name: mastodon-health
+    hostname: mastodon-health
+    entrypoint: ["bash", "/run.sh"]
+    environment:
+      - TZ=${TZ}
+      - DOCKER_PROXY_URL=${DOCKER_PROXY_URL:-http://127.0.0.1:2375}
+      - DOCKER_API_VERSION=${DOCKER_API_VERSION:-v1.46}
+      - KUMA_PUSH_URL=${KUMA_PUSH_URL}
+      - KUMA_CONTAINERS=mastodon,mastodon-db,mastodon-broker,mastodon-search,mastodon-tunnel
+      - KUMA_TOKEN_MASTODON=${KUMA_TOKEN_MASTODON}
+      - KUMA_TOKEN_MASTODON_DB=${KUMA_TOKEN_MASTODON_DB}
+      - KUMA_TOKEN_MASTODON_BROKER=${KUMA_TOKEN_MASTODON_BROKER}
+      - KUMA_TOKEN_MASTODON_SEARCH=${KUMA_TOKEN_MASTODON_SEARCH}
+      - KUMA_TOKEN_MASTODON_TUNNEL=${KUMA_TOKEN_MASTODON_TUNNEL}
+      - KUMA_INTERVAL=${KUMA_INTERVAL:-60}
+      - KUMA_STARTING_STATE=${KUMA_STARTING_STATE:-skip}
+    volumes:
+      - /data/mastodon/health/run.sh:/run.sh:ro
+    labels:
+      - com.getarcaneapp.arcane.icon=https://icons.home.arpa/uptime-kuma.svg
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pidof bash || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  mastodon-status:
+    image: nginx:latest
+    container_name: mastodon-status
+    hostname: mastodon-status
+    environment:
+      - TZ=${TZ}
+    ports:
+      - ${STATUS_PORT:-8080}:80
+    volumes:
+      - /data/mastodon/status/nginx.conf:/etc/nginx/nginx.conf:ro
+    labels:
+      - com.getarcaneapp.arcane.icon=https://icons.home.arpa/uptime-kuma.svg
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs -o /dev/null http://localhost/api/entry-page || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
